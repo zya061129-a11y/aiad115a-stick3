@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>便利貼看板 Sticky Notes Board</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #ffffff;
+            background-image: radial-gradient(#e5e7eb 1px, transparent 0);
+            background-size: 24px 24px;
+            overflow-x: hidden;
+        }
+
+        .handwriting {
+            font-family: 'Caveat', 'Noto Sans TC', cursive;
+        }
+
+        /* 便利貼色彩與陰影 */
+        .note-yellow { background-color: #fff9c4; color: #5c4d10; border: 1px solid #fbc02d33; }
+        .note-pink { background-color: #ffebee; color: #6b262c; border: 1px solid #ef535033; }
+        .note-green { background-color: #e8f5e9; color: #1b4d20; border: 1px solid #66bb6a33; }
+        .note-blue { background-color: #e3f2fd; color: #0d3c61; border: 1px solid #42a5f533; }
+        .note-purple { background-color: #f3e5f5; color: #4a148c; border: 1px solid #ab47bc33; }
+
+        .note-card {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+            transition: box-shadow 0.2s ease, transform 0.15s ease-out;
+            touch-action: none; /* 禁止手機預設滾動以實現順暢拖曳 */
+        }
+
+        .note-card:hover {
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12), 0 6px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .note-card.dragging {
+            box-shadow: 0 20px 35px rgba(0, 0, 0, 0.2);
+            opacity: 0.9;
+            cursor: grabbing !important;
+            transition: none !important;
+        }
+
+        .drag-handle {
+            cursor: grab;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        /* 隱藏原生滾動條 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-gray-800 pb-12 select-none">
+
+    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-gray-100 shadow-sm px-4 py-3 sm:px-8">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            <!-- 標題與計數器 -->
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-amber-500 text-white rounded-xl shadow-md">
+                    <i class="fa-solid fa-note-sticky text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-bold text-gray-800 tracking-wide flex items-center gap-2">
+                        便利貼看板
+                    </h1>
+                    <p class="text-xs text-gray-500">自由拖曳擺放 · 靈感隨手記錄</p>
+                </div>
+                <span id="note-count-badge" class="ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+                    0 張便利貼
+                </span>
+            </div>
+
+            <!-- 控制列：搜尋、顏色選擇、排列與新增 -->
+            <div class="flex flex-wrap items-center justify-center gap-3 w-full md:w-auto">
+                
+                <!-- 搜尋框 -->
+                <div class="relative flex-1 sm:w-44">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="text" id="search-input" placeholder="搜尋便利貼..." 
+                        class="w-full pl-9 pr-3 py-1.5 text-sm bg-gray-100/80 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
+                </div>
+
+                <!-- 顏色選擇器 -->
+                <div class="flex items-center gap-1.5 bg-gray-100/80 p-1 rounded-xl border border-gray-200">
+                    <button data-color="note-yellow" class="color-picker-btn w-6 h-6 rounded-full bg-[#fff3a8] border-2 border-amber-400 scale-110 transition hover:opacity-80" title="經典黃"></button>
+                    <button data-color="note-pink" class="color-picker-btn w-6 h-6 rounded-full bg-[#ffcdd2] border-2 border-transparent transition hover:opacity-80" title="草莓粉"></button>
+                    <button data-color="note-green" class="color-picker-btn w-6 h-6 rounded-full bg-[#c8e6c9] border-2 border-transparent transition hover:opacity-80" title="薄荷綠"></button>
+                    <button data-color="note-blue" class="color-picker-btn w-6 h-6 rounded-full bg-[#bbdefb] border-2 border-transparent transition hover:opacity-80" title="天空藍"></button>
+                    <button data-color="note-purple" class="color-picker-btn w-6 h-6 rounded-full bg-[#e1bee7] border-2 border-transparent transition hover:opacity-80" title="薰衣草紫"></button>
+                </div>
+
+                <!-- 自動排版按鈕 -->
+                <button id="auto-arrange-btn" class="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 text-sm font-medium px-3 py-2 rounded-xl border border-gray-200 transition" title="自動對齊整齊排列">
+                    <i class="fa-solid fa-table-cells text-gray-500"></i>
+                    <span>自動排版</span>
+                </button>
+
+                <!-- 新增與清空按鈕 -->
+                <button id="add-note-btn" class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-md transition">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>新增便利貼</span>
+                </button>
+
+                <button id="clear-all-btn" class="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition" title="清空所有便利貼">
+                    <i class="fa-solid fa-trash-can text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="w-full mx-auto px-4 sm:px-8 pt-6 flex-1 flex flex-col relative">
+        
+        <!-- 空狀態提示 -->
+        <div id="empty-state" class="hidden flex-col items-center justify-center py-20 text-center my-auto">
+            <div class="w-24 h-24 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-4xl mb-4 shadow-inner">
+                <i class="fa-regular fa-sticky-note"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-700 mb-1">看板上目前沒有便利貼</h3>
+            <p class="text-gray-500 text-sm max-w-xs mb-6">點擊上方「新增便利貼」按鈕，即可建立並自由拖曳擺放！</p>
+            <button onclick="document.getElementById('add-note-btn').click()" class="bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl shadow transition">
+                建立第一張便利貼
+            </button>
+        </div>
+
+        <!-- 絕對定位繪圖板區域 -->
+        <div id="board-canvas" class="relative w-full min-h-[75vh] flex-1">
+            <!-- 便利貼項目將動態渲染至此 -->
+        </div>
+    </main>
+
+    <!-- Modal 對話框 -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-200 px-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl transform scale-95 transition-transform duration-200" id="modal-box">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-lg font-bold text-gray-800 mb-2">確定要清空所有便利貼？</h3>
+                <p class="text-sm text-gray-500 mb-6">此操作無法復原，所有已儲存的便利貼內容與位置將會被永久移除。</p>
+            </div>
+            <div class="flex gap-3">
+                <button id="modal-cancel-btn" class="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm rounded-xl transition">
+                    取消
+                </button>
+                <button id="modal-confirm-btn" class="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white font-medium text-sm rounded-xl shadow transition">
+                    確定清空
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 應用程式狀態
+        let notes = [];
+        let selectedColor = 'note-yellow';
+        let searchQuery = '';
+        let highestZIndex = 100;
+
+        // 拖曳暫存變數
+        let isDragging = false;
+        let currentDragNoteId = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // DOM 元素引用
+        const boardCanvas = document.getElementById('board-canvas');
+        const emptyState = document.getElementById('empty-state');
+        const addNoteBtn = document.getElementById('add-note-btn');
+        const clearAllBtn = document.getElementById('clear-all-btn');
+        const autoArrangeBtn = document.getElementById('auto-arrange-btn');
+        const searchInput = document.getElementById('search-input');
+        const noteCountBadge = document.getElementById('note-count-badge');
+        const colorPickerBtns = document.querySelectorAll('.color-picker-btn');
+
+        // Modal DOM
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalBox = document.getElementById('modal-box');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            loadNotesFromLocalStorage();
+            setupEventListeners();
+            setupGlobalDragEvents();
+            renderNotes();
+        });
+
+        function setupEventListeners() {
+            addNoteBtn.addEventListener('click', () => createNewNote());
+
+            // 選擇顏色
+            colorPickerBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    colorPickerBtns.forEach(b => {
+                        b.classList.remove('scale-110', 'border-amber-400');
+                        b.classList.add('border-transparent');
+                    });
+                    const target = e.currentTarget;
+                    target.classList.add('scale-110', 'border-amber-400');
+                    target.classList.remove('border-transparent');
+                    selectedColor = target.getAttribute('data-color');
+                });
+            });
+
+            // 關鍵字搜尋
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.trim().toLowerCase();
+                renderNotes();
+            });
+
+            // 自動對齊整齊排列
+            autoArrangeBtn.addEventListener('click', autoArrangeNotes);
+
+            // 清空所有便利貼
+            clearAllBtn.addEventListener('click', () => {
+                if (notes.length === 0) return;
+                showModal();
+            });
+
+            modalCancelBtn.addEventListener('click', hideModal);
+            modalConfirmBtn.addEventListener('click', () => {
+                notes = [];
+                saveNotesToLocalStorage();
+                renderNotes();
+                hideModal();
+            });
+
+            // 視窗大小改變時校正邊界
+            window.addEventListener('resize', clampAllNotesPosition);
+        }
+
+        function loadNotesFromLocalStorage() {
+            try {
+                const savedNotes = localStorage.getItem('sticky_notes_data_v2');
+                if (savedNotes) {
+                    notes = JSON.parse(savedNotes);
+                    // 計算最高 Z-Index
+                    notes.forEach(n => {
+                        if (n.zIndex && n.zIndex > highestZIndex) highestZIndex = n.zIndex;
+                    });
+                }
+            } catch (error) {
+                console.error('無法讀取 LocalStorage 資料:', error);
+                notes = [];
+            }
+        }
+
+        function saveNotesToLocalStorage() {
+            try {
+                localStorage.setItem('sticky_notes_data_v2', JSON.stringify(notes));
+            } catch (error) {
+                console.error('無法寫入 LocalStorage 資料:', error);
+            }
+        }
+
+        function createNewNote() {
+            const randomRotation = (Math.random() * 4 - 2).toFixed(1);
+            
+            // 計算預設新增位置 (交錯開)
+            const count = notes.length;
+            const canvasWidth = boardCanvas.clientWidth || window.innerWidth - 64;
+            const cardWidth = 260;
+            const cardHeight = 220;
+
+            // 在看板中央附近產生隨機位置
+            const defaultX = Math.min(Math.max(20, (count * 30) % (canvasWidth - cardWidth)), canvasWidth - cardWidth);
+            const defaultY = 20 + ((count * 20) % 300);
+
+            highestZIndex += 1;
+
+            const newNote = {
+                id: 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                title: '',
+                content: '',
+                color: selectedColor,
+                rotation: randomRotation,
+                x: defaultX,
+                y: defaultY,
+                zIndex: highestZIndex,
+                createdAt: new Date().toLocaleString('zh-TW', {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            };
+
+            notes.push(newNote);
+            saveNotesToLocalStorage();
+            renderNotes();
+
+            // 自動聚焦到新建立便利貼的標題
+            setTimeout(() => {
+                const titleElem = document.querySelector(`[data-id="${newNote.id}"] .note-title`);
+                if (titleElem) titleElem.focus();
+            }, 50);
+        }
+
+        function updateNote(id, field, value) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                note[field] = value;
+                saveNotesToLocalStorage();
+            }
+        }
+
+        function deleteNote(id) {
+            notes = notes.filter(n => n.id !== id);
+            saveNotesToLocalStorage();
+            renderNotes();
+        }
+
+        function changeNoteColor(id, newColor) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                note.color = newColor;
+                saveNotesToLocalStorage();
+                renderNotes();
+            }
+        }
+
+        // 自動排列便利貼（網格擺放）
+        function autoArrangeNotes() {
+            if (notes.length === 0) return;
+
+            const canvasWidth = boardCanvas.clientWidth || (window.innerWidth - 64);
+            const cardWidth = 260;
+            const cardHeight = 230;
+            const gap = 24;
+
+            const columns = Math.max(1, Math.floor((canvasWidth + gap) / (cardWidth + gap)));
+
+            notes.forEach((note, index) => {
+                const col = index % columns;
+                const row = Math.floor(index / columns);
+
+                note.x = col * (cardWidth + gap);
+                note.y = row * (cardHeight + gap);
+            });
+
+            saveNotesToLocalStorage();
+            renderNotes();
+        }
+
+        // 防止便利貼超出一螢幕外
+        function clampAllNotesPosition() {
+            const canvasWidth = boardCanvas.clientWidth;
+            const cardWidth = 260;
+
+            let updated = false;
+            notes.forEach(note => {
+                if (canvasWidth > 0 && note.x > canvasWidth - cardWidth) {
+                    note.x = Math.max(0, canvasWidth - cardWidth);
+                    updated = true;
+                }
+            });
+
+            if (updated) {
+                saveNotesToLocalStorage();
+                renderNotes();
+            }
+        }
+
+        function setupGlobalDragEvents() {
+            // 移動事件 (Mouse / Touch)
+            const handleMove = (e) => {
+                if (!isDragging || !currentDragNoteId) return;
+
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                const boardRect = boardCanvas.getBoundingClientRect();
+
+                let newX = clientX - boardRect.left - dragOffsetX;
+                let newY = clientY - boardRect.top - dragOffsetY;
+
+                // 邊界保護 (不可出螢幕範圍)
+                const cardWidth = 260;
+                const minX = 0;
+                const maxX = Math.max(0, boardRect.width - cardWidth);
+                const minY = 0;
+
+                newX = Math.max(minX, Math.min(newX, maxX));
+                newY = Math.max(minY, newY);
+
+                // 更新 DOM 實時渲染位置
+                const noteElem = document.querySelector(`[data-id="${currentDragNoteId}"]`);
+                if (noteElem) {
+                    noteElem.style.left = `${newX}px`;
+                    noteElem.style.top = `${newY}px`;
+                }
+
+                // 更新資料 model
+                const note = notes.find(n => n.id === currentDragNoteId);
+                if (note) {
+                    note.x = newX;
+                    note.y = newY;
+                }
+            };
+
+            // 放開拖曳事件
+            const handleEnd = () => {
+                if (!isDragging) return;
+
+                const noteElem = document.querySelector(`[data-id="${currentDragNoteId}"]`);
+                if (noteElem) {
+                    noteElem.classList.remove('dragging');
+                }
+
+                isDragging = false;
+                currentDragNoteId = null;
+                saveNotesToLocalStorage();
+            };
+
+            window.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleEnd);
+            window.addEventListener('touchmove', handleMove, { passive: false });
+            window.addEventListener('touchend', handleEnd);
+        }
+
+        function startDrag(e, noteId) {
+            // 若點擊的是輸入框或按鈕，不啟動拖曳
+            if (['INPUT', 'TEXTAREA', 'BUTTON', 'I'].includes(e.target.tagName)) {
+                return;
+            }
+
+            e.preventDefault();
+            isDragging = true;
+            currentDragNoteId = noteId;
+
+            const noteElem = document.querySelector(`[data-id="${noteId}"]`);
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            const elemRect = noteElem.getBoundingClientRect();
+            dragOffsetX = clientX - elemRect.left;
+            dragOffsetY = clientY - elemRect.top;
+
+            // 提升層級 z-index
+            highestZIndex += 1;
+            const note = notes.find(n => n.id === noteId);
+            if (note) {
+                note.zIndex = highestZIndex;
+                noteElem.style.zIndex = highestZIndex;
+            }
+
+            noteElem.classList.add('dragging');
+        }
+
+        function renderNotes() {
+            const filteredNotes = notes.filter(note => {
+                if (!searchQuery) return true;
+                return note.title.toLowerCase().includes(searchQuery) || 
+                       note.content.toLowerCase().includes(searchQuery);
+            });
+
+            // 更新總計數
+            noteCountBadge.textContent = `${notes.length} 張便利貼`;
+
+            // 切換空狀態
+            if (notes.length === 0) {
+                boardCanvas.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('flex');
+                return;
+            } else {
+                emptyState.classList.remove('flex');
+                emptyState.classList.add('hidden');
+            }
+
+            boardCanvas.innerHTML = '';
+
+            // 渲染所有便利貼 (改用 Absolute 定位)
+            filteredNotes.forEach(note => {
+                const noteElement = document.createElement('div');
+                noteElement.className = `${note.color} note-card rounded-2xl p-4 flex flex-col justify-between absolute w-[260px] min-h-[220px] select-text`;
+                noteElement.style.left = `${note.x || 0}px`;
+                noteElement.style.top = `${note.y || 0}px`;
+                noteElement.style.zIndex = note.zIndex || 10;
+                noteElement.style.transform = `rotate(${note.rotation || 0}deg)`;
+                noteElement.setAttribute('data-id', note.id);
+
+                noteElement.innerHTML = `
+                    <!-- 頂部拖曳把手與控制區 -->
+                    <div class="drag-handle flex items-center justify-between mb-2 border-b border-black/10 pb-2 select-none"
+                         onmousedown="startDrag(event, '${note.id}')"
+                         ontouchstart="startDrag(event, '${note.id}')">
+                        
+                        <div class="flex items-center gap-1">
+                            <span class="text-black/30 hover:text-black/60 mr-1 cursor-grab" title="按住拖曳">
+                                <i class="fa-solid fa-grip-vertical text-xs"></i>
+                            </span>
+                            <button onclick="changeNoteColor('${note.id}', 'note-yellow')" class="w-3.5 h-3.5 rounded-full bg-[#fff3a8] border border-black/20 hover:scale-125 transition" title="黃色"></button>
+                            <button onclick="changeNoteColor('${note.id}', 'note-pink')" class="w-3.5 h-3.5 rounded-full bg-[#ffcdd2] border border-black/20 hover:scale-125 transition" title="粉色"></button>
+                            <button onclick="changeNoteColor('${note.id}', 'note-green')" class="w-3.5 h-3.5 rounded-full bg-[#c8e6c9] border border-black/20 hover:scale-125 transition" title="綠色"></button>
+                            <button onclick="changeNoteColor('${note.id}', 'note-blue')" class="w-3.5 h-3.5 rounded-full bg-[#bbdefb] border border-black/20 hover:scale-125 transition" title="藍色"></button>
+                            <button onclick="changeNoteColor('${note.id}', 'note-purple')" class="w-3.5 h-3.5 rounded-full bg-[#e1bee7] border border-black/20 hover:scale-125 transition" title="紫色"></button>
+                        </div>
+                        
+                        <button onclick="deleteNote('${note.id}')" class="text-black/40 hover:text-red-600 transition p-1 rounded-md" title="刪除便利貼">
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+
+                    <!-- 內容編輯區域 -->
+                    <div class="flex-1 flex flex-col gap-1.5">
+                        <input type="text" 
+                            class="note-title font-bold bg-transparent border-none outline-none text-base w-full placeholder-black/30" 
+                            placeholder="標題..." 
+                            value="${escapeHtml(note.title)}"
+                            oninput="updateNote('${note.id}', 'title', this.value)">
+                        
+                        <textarea 
+                            class="note-content flex-1 bg-transparent border-none outline-none text-sm w-full resize-none no-scrollbar placeholder-black/30 leading-relaxed" 
+                            placeholder="輸入內容..." 
+                            oninput="updateNote('${note.id}', 'content', this.value)">${escapeHtml(note.content)}</textarea>
+                    </div>
+
+                    <!-- 底部時間戳記 -->
+                    <div class="mt-2 pt-2 border-t border-black/5 flex justify-end items-center select-none">
+                        <span class="text-[10px] opacity-40 font-mono tracking-tighter">${note.createdAt}</span>
+                    </div>
+                `;
+
+                boardCanvas.appendChild(noteElement);
+            });
+        }
+
+        // Modal 顯示隱藏
+        function showModal() {
+            modalOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            modalOverlay.classList.add('opacity-100');
+            modalBox.classList.remove('scale-95');
+            modalBox.classList.add('scale-100');
+        }
+
+        function hideModal() {
+            modalOverlay.classList.add('opacity-0', 'pointer-events-none');
+            modalOverlay.classList.remove('opacity-100');
+            modalBox.classList.add('scale-95');
+            modalBox.classList.remove('scale-100');
+        }
+
+        // HTML 轉義防護
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
